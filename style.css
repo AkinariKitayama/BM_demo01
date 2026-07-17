@@ -1,0 +1,62 @@
+  :root {
+    --line: rgba(255,255,255,0.85);
+    --hair: rgba(255,255,255,0.16);
+    --dim:  rgba(255,255,255,0.45);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #000; color: #fff;
+    font-family: var(--mono);
+    font-size: 12px; line-height: 1.5;
+    display: grid; grid-template-columns: 1fr 260px;
+  }
+  /* --- canvas side --- */
+  #stage { position: relative; overflow: hidden; }
+  #view { display: block; width: 100%; height: 100%; }
+  #empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--dim); letter-spacing: .04em; text-align: center; padding: 24px;
+  }
+  /* --- control side --- */
+  #panel {
+    border-left: 1px solid var(--hair);
+    padding: 18px 16px; display: flex; flex-direction: column; gap: 18px;
+    overflow-y: auto;
+  }
+  .title { letter-spacing: .18em; text-transform: uppercase; color: var(--dim); font-size: 10px; }
+  .group { display: flex; flex-direction: column; gap: 8px; }
+  .group > .label { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  input[type=range] { width: 100%; accent-color: #fff; }
+  input[type=file] { display: none; }
+  .btn {
+    border: 1px solid var(--hair); background: transparent; color: #fff;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+    padding: 8px 10px; cursor: pointer; text-align: center;
+  }
+  .btn:hover { border-color: var(--line); }
+  .check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .check input { accent-color: #fff; }
+  .meta { color: var(--dim); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  .meta b { color: #fff; font-weight: normal; }
+  .readout { font-variant-numeric: tabular-nums; }
+  hr { border: none; border-top: 1px solid var(--hair); margin: 0; }
+
+  .srow { display: flex; align-items: center; gap: 10px; }
+ .srow > span { width: 16px; color: var(--dim); }
+ .srow > input[type=range] { flex: 1; }
+ select.btn { appearance: none; -webkit-appearance: none; background: #000; }
+ select.btn option { background: #000; color: #fff; }
+
+ #pad {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: crosshair;
+    touch-action: none;   /* ドラッグ中に画面スクロールさせない */
+  }
