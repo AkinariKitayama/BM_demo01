@@ -461,24 +461,24 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
     // マウス位置から操作モードを判定: 'resize' | 'move' | 'blend' | null
       const VERTEX_GRAB = 30, EDGE_GRAB = 24;
 
-     function padHit(p) {
-        const verts = padVertices();
-        if (verts.length < 2) return null;
-        // 角 → resize（最優先）
-        for (const v of verts) if (Math.hypot(p.x - v.x, p.y - v.y) <= VERTEX_GRAB) return
-  "resize";
-        // 2頂点＝線分は内側が無いので、線の近く＝ブレンド（線上に投影される）
-        if (verts.length === 2) {
-          return distToSegment(p, verts[0], verts[1]) <= EDGE_GRAB * 2 ? "blend" : null;
+      function padHit(p) {
+          const verts = padVertices();
+          if (verts.length < 2) return null;
+          // 角 → resize（最優先）
+          for (const v of verts)
+            if (Math.hypot(p.x - v.x, p.y - v.y) <= VERTEX_GRAB) return "resize";
+          // 2頂点＝線分は内側が無いので、線の近く＝ブレンド（線上に投影される）
+          if (verts.length === 2) {
+            return distToSegment(p, verts[0], verts[1]) <= EDGE_GRAB * 2 ? "blend" : null;
+          }
+          // 辺 → move
+          for (let i = 0; i < verts.length; i++)
+            if (distToSegment(p, verts[i], verts[(i + 1) % verts.length]) <= EDGE_GRAB)
+  return "move";
+          // 内側 → blend
+          if (pointInPoly(p, verts)) return "blend";
+          return null;
         }
-        // 辺 → move
-        for (let i = 0; i < verts.length; i++)
-          if (distToSegment(p, verts[i], verts[(i + 1) % verts.length]) <= EDGE_GRAB) return
-  "move";
-        // 内側 → blend
-        if (pointInPoly(p, verts)) return "blend";
-        return null;
-      }
 
    function setBlend(p) {
         const q = clampToPoly(p, padVertices());   // ★図形の外に出さない
@@ -582,6 +582,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
     });
     elPad.addEventListener("pointermove", (e) => {
       const p = padXY(e);
+        // console.log("[pad] move padMode=", padMode);   // ★診断
       if (!padMode) {                             // 非ドラッグ時 → カーソル形状だけ更新
         const hit = padHit(p);
         elPad.style.cursor = hit === "resize" ? "nwse-resize"
