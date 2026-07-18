@@ -430,7 +430,8 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
 
         // 頂点＝白点（＋掴みリング）。種名はモーフ中は省略（頂点数が過渡的に合わないため）
         const act = activeSources();
-         padCtx.font = "100 10px 'm-plus-2c', sans-serif"; padCtx.textAlign = "center";
+         padCtx.font = "100 12px 'm-plus-2c', sans-serif";
+        padCtx.textAlign = "center"; padCtx.textBaseline = "alphabetic";
         verts.forEach((v, i) => {
           padCtx.strokeStyle = "rgba(255,255,255,0.18)"; padCtx.lineWidth = 1;
           padCtx.beginPath(); padCtx.arc(v.x, v.y, VERTEX_GRAB, 0, Math.PI * 2);
@@ -438,7 +439,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
           padCtx.fillStyle = "#fff";
           padCtx.beginPath(); padCtx.arc(v.x, v.y, 4, 0, Math.PI * 2); padCtx.fill();
           padCtx.fillStyle = "#aaa";
-           padCtx.fillText(sourceLabel(act[i]), v.x, v.y - 9);
+           padCtx.fillText(sourceLabel(act[i]), v.x, v.y - 11);
         });
   
          // ブレンド操作点 = 太い線の白い輪郭円
