@@ -83,9 +83,6 @@ fetch("/data/list.json")
       });
       state.active = state.sources.map((_, i) => i);   // 初期は全種
       initAfterLoad();
-  
-
-      initAfterLoad();
     })
     .catch(err => { elEmpty.textContent = "読み込みエラー: " + err.message; });
 
@@ -331,6 +328,7 @@ requestAnimationFrame(tick);
   
     // 中心 state.padCenter・半径 state.padR から正N角形の頂点（頂点0=真上）
  function padVertices() {
+  if (!state.padCenter) return [];        // ★ロード前は空を返してクラッシュ防止
         const n = state.active.length || 1;
         const { x: cx, y: cy } = state.padCenter;
         const R = state.padR;   
