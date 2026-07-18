@@ -16,6 +16,9 @@ const state = {
   showLines: true,
   morph: null,      // 角数変化のモーフ中の状態
    nameMode: "sci",   // ラベル表示: "sci"=学名 / "wa"=和名
+    panX: 0,          // 横スワイプの累積移動量
+    zoom: 1,          // ピンチズーム倍率
+    panVel: 0,        // 横スワイプの慣性速度（px/フレーム）
 };
 
 // DOM
@@ -232,7 +235,7 @@ function centroid(raw, joints) {
 
 // 正規化座標（トルソ長=1基準）→ 画面座標。中央に置き、offsetでずらす
 function normToScreen(x, y, cx, cy) {
-    const ds = Math.min(canvas.clientWidth, canvas.clientHeight) * 0.234;
+    const ds = Math.min(canvas.clientWidth, canvas.clientHeight) * 0.234 * (state.zoom || 1);
     return [ cx + (x + state.offset.x) * ds,
              cy + (y + state.offset.y) * ds ];
   }
@@ -271,12 +274,12 @@ function render(phase) {
     const pose = blendedPose(phase, state.weights);
       const joints = activeSources()[0].joints;
     
-   const COPIES = 3;              // ★横に並べる複製数
-    const STEP   = cw * 0.32;      // ★複製どうしの間隔（中心間の距離px）。増やすと広がる
-    const cy = ch * 0.58;          // ★やや下（0.5=中央。大きいほど下）
-    const cx0 = cw / 2 - STEP * (COPIES - 1) / 2;   // 群全体を中央寄せ
-    for (let k = 0; k < COPIES; k++) {
-      const cx = cx0 + STEP * k;
+  const zoom = state.zoom || 1;
+    const step = cw * 0.5 * zoom;                    // 複製間隔（ズーム連動）
+    const cy = ch * 0.58;
+    const panX = state.panX || 0;
+    const off = ((panX % step) + step) % step;        // 0..step（無限ループ用）
+    for (let cx = off - step; cx < cw + step; cx += step) {
       drawPose(pose, joints, cx, cy);
     }
   }
@@ -303,6 +306,12 @@ function tick(ts) {
         state.phase += dt * rate;
         state.phase %= 1; if (state.phase < 0) state.phase += 1;
       } 
+      // 横スワイプの慣性（ドラッグ/ピンチ中でないときだけ減衰しながら流す）
+        if (!panStart && !pinchStart && state.panVel) {
+          state.panX += state.panVel;
+          state.panVel *= 0.93;                             // 摩擦（1に近いほど長く滑る）
+          if (Math.abs(state.panVel) < 0.1) state.panVel = 0;
+        }
     render(state.phase);
   }
   lastTs = ts;
@@ -627,44 +636,87 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
 
   
      // ---- 操作 ----
+
+     // ---- 背景ジェスチャ：スワイプ=パン / ピンチ=ズーム ----
+      const bgPointers = new Map();
+      let panStart = null, pinchStart = null;
+
+      function bgDown(e) {
+        state.panVel = 0;                         // ★触れたら流れを止める
+        bgPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        elPad.setPointerCapture(e.pointerId);
+        if (bgPointers.size >= 2) {
+          const [a, b] = [...bgPointers.values()];
+          pinchStart = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom: state.zoom || 1 };
+          panStart = null;
+        } else {
+          panStart = { x: e.clientX, panX: state.panX || 0 };
+          pinchStart = null;
+        }
+      }
+      function bgMove(e) {
+        bgPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (bgPointers.size >= 2 && pinchStart) {          // ピンチ→ズーム
+          const [a, b] = [...bgPointers.values()];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          state.zoom = Math.max(0.3, Math.min(4, pinchStart.zoom * d / pinchStart.dist));
+        } else if (panStart) {                              // スワイプ→パン
+          const newPanX = panStart.panX + (e.clientX - panStart.x);
+          state.panVel = newPanX - state.panX;              // このフレームの移動量＝速度
+          state.panX = newPanX;
+        }
+      }
+
+      function bgUp(e) {
+        bgPointers.delete(e.pointerId);                           
+        pinchStart = null;
+        if (bgPointers.size === 1) {
+          const pos = [...bgPointers.values()][0];
+          panStart = { x: pos.x, panX: state.panX || 0 };  // 1本残ったらパン再開
+        } else if (bgPointers.size === 0) {
+          panStart = null;
+        }
+      }
+
       let padMode = null, moveGrab = null;
       elPad.addEventListener("pointerdown", (e) => {
-        e.preventDefault();            // ★ネイティブのドラッグ/選択を止める
-        const p = padXY(e);            
+        e.preventDefault();
+        const p = padXY(e);
         padMode = padHit(p);
-        // console.log("[pad] down:", padMode);   // ★診断（後で消す）
-        if (!padMode) return;                       // 図形の外 → 何もしない
-        elPad.setPointerCapture(e.pointerId);       
-        if (padMode === "move") moveGrab = { dx: p.x - state.padCenter.x, dy: p.y -
-  state.padCenter.y };
-       if (padMode === "blend") { state.coordShow = true; setBlend(p); }
-
-
-    });
-    elPad.addEventListener("pointermove", (e) => {
-      const p = padXY(e);
-        // console.log("[pad] move padMode=", padMode);   // ★診断
-      if (!padMode) {                             // 非ドラッグ時 → カーソル形状だけ更新
-        const hit = padHit(p);
-        elPad.style.cursor = hit === "resize" ? "nwse-resize"
-                           : hit === "move"   ? "move"
-                           : hit === "blend"  ? "crosshair" : "default";
-        return;
-      }
-      if (padMode === "resize") {                 // 角ドラッグ → 中心からの距離を半径に
-          // console.log("[pad] resize drag");         // ★診断（後で消す）
-          state.padR = Math.max(30, Math.hypot(p.x - state.padCenter.x, p.y -
-  state.padCenter.y));
+        if (!padMode) { bgDown(e); return; }        // 図形の外 → 背景ジェスチャ
+        elPad.setPointerCapture(e.pointerId);
+        if (padMode === "move") moveGrab = { dx: p.x - state.padCenter.x, dy: p.y - state.padCenter.y };
+        if (padMode === "blend") { state.coordShow = true; setBlend(p); }
+      });
+      elPad.addEventListener("pointermove", (e) => {
+        if (bgPointers.has(e.pointerId)) { bgMove(e); return; }   // 背景ジェスチャ優先
+        const p = padXY(e);
+        if (!padMode) {
+          const hit = padHit(p);
+          elPad.style.cursor = hit === "resize" ? "nwse-resize"
+                             : hit === "move"   ? "move"
+                             : hit === "blend"  ? "crosshair" : "default";
+          return;
+        }
+        if (padMode === "resize") {
+          state.padR = Math.max(30, Math.hypot(p.x - state.padCenter.x, p.y - state.padCenter.y));
           drawPad();
-      } else if (padMode === "move") {            // 辺ドラッグ → 図形ごと平行移動
-        state.padCenter = { x: p.x - moveGrab.dx, y: p.y - moveGrab.dy };
-        drawPad();
-      } else if (padMode === "blend") {           // 内側ドラッグ → ブレンド点
-        setBlend(p);
-      }
-    });
-     elPad.addEventListener("pointerup", () => { padMode = null; state.coordShow = false; drawPad();
-  });
+        } else if (padMode === "move") {
+          state.padCenter = { x: p.x - moveGrab.dx, y: p.y - moveGrab.dy };
+          drawPad();
+        } else if (padMode === "blend") {
+          setBlend(p);
+        }
+      });
+      elPad.addEventListener("pointerup", (e) => {
+        if (bgPointers.has(e.pointerId)) bgUp(e);
+        padMode = null; state.coordShow = false; drawPad();
+      });
+      elPad.addEventListener("pointercancel", (e) => {
+        if (bgPointers.has(e.pointerId)) bgUp(e);
+        padMode = null; state.coordShow = false;
+      });
+
 
     suInc.addEventListener("click", shapeInc);
       suDec.addEventListener("click", shapeDec);
