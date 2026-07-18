@@ -71,6 +71,7 @@
          bottom: calc(12px + env(safe-area-inset-bottom));
          color: var(--dim); font-size: 11px; z-index: 11;
          pointer-events: none;
+        display: none;
        }
 
 

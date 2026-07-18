@@ -391,6 +391,24 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
   }));
       }
 
+      // 点pの周りの頂点を上下/左右の端で選び、その重みをラベル付きで返す
+      function axisWeights(p) {
+        const verts = padVertices();
+        const act = activeSources();
+        const items = verts.map((v, i) => ({
+          label: sourceLabel(act[i]),
+          w: state.weights[i] || 0,
+          dx: v.x - p.x, dy: v.y - p.y,
+        }));
+        const byY = [...items].sort((a, b) => a.dy - b.dy);   // 上(小)→下(大)
+        const byX = [...items].sort((a, b) => a.dx - b.dx);   // 左(小)→右(大)
+        const fmt = (it) => `${it.label} ${it.w.toFixed(2)}`;
+        return {
+          yPair: [fmt(byY[0]), fmt(byY[byY.length - 1])],     // 右の先：一番上・一番下
+          xPair: [fmt(byX[0]), fmt(byX[byX.length - 1])],     // 下の先：一番左・一番右
+        };
+      }
+
     function drawPad() {
         padCtx.clearRect(0, 0, elPad.clientWidth, elPad.clientHeight);
         const verts = padVertices();
@@ -420,6 +438,29 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
           padCtx.fillStyle = "#fff";
           padCtx.beginPath(); padCtx.arc(p.x, p.y, 5, 0, Math.PI * 2); padCtx.fill();
         }
+
+         // ドラッグ中だけ、点から右・下に線を伸ばして重みを表示
+        if (state.coordShow) {
+          const q = padPointScreen();
+          if (q) {
+            const margin = 16;                                    // 図形からはみ出す量
+            const rx = state.padCenter.x + state.padR + margin;   // 右の終点（図形の外接円＋余白）
+            const dy = state.padCenter.y + state.padR + margin;   // 下の終点
+            padCtx.strokeStyle = "rgba(255,255,255,0.6)"; padCtx.lineWidth = 1;
+            padCtx.beginPath(); padCtx.moveTo(q.x, q.y); padCtx.lineTo(rx, q.y); padCtx.stroke(); // 右
+            padCtx.beginPath(); padCtx.moveTo(q.x, q.y); padCtx.lineTo(q.x, dy); padCtx.stroke(); // 下
+            
+            const { yPair, xPair } = axisWeights(q);
+            padCtx.fillStyle = "#fff"; padCtx.font = "100 10px 'm-plus-2c', sans-serif";
+            padCtx.textAlign = "left"; padCtx.textBaseline = "middle";
+            padCtx.fillText(yPair[0], rx + 4, q.y - 6);
+            padCtx.fillText(yPair[1], rx + 4, q.y + 6);
+            padCtx.textAlign = "center"; padCtx.textBaseline = "top";
+            padCtx.fillText(xPair[0], q.x, dy + 4);
+            padCtx.fillText(xPair[1], q.x, dy + 16);
+          }
+        }
+
       }
 
 
@@ -596,7 +637,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
         elPad.setPointerCapture(e.pointerId);       
         if (padMode === "move") moveGrab = { dx: p.x - state.padCenter.x, dy: p.y -
   state.padCenter.y };
-        if (padMode === "blend") setBlend(p);
+       if (padMode === "blend") { state.coordShow = true; setBlend(p); }
 
 
     });
@@ -622,7 +663,8 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
         setBlend(p);
       }
     });
-    elPad.addEventListener("pointerup", () => { padMode = null; });
+     elPad.addEventListener("pointerup", () => { padMode = null; state.coordShow = false; drawPad();
+  });
 
     suInc.addEventListener("click", shapeInc);
       suDec.addEventListener("click", shapeDec);
