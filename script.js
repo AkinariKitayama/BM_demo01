@@ -275,7 +275,7 @@ function render(phase) {
       const joints = activeSources()[0].joints;
     
   const zoom = state.zoom || 1;
-    const step = cw * 0.5 * zoom;                    // 複製間隔（ズーム連動）
+    const step = cw * 0.45 * zoom;                    // 複製間隔（ズーム連動）
     const cy = ch * 0.58;
     const panX = state.panX || 0;
     const off = ((panX % step) + step) % step;        // 0..step（無限ループ用）
@@ -441,11 +441,12 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
            padCtx.fillText(sourceLabel(act[i]), v.x, v.y - 9);
         });
   
-        // ブレンド操作点（白）
+         // ブレンド操作点 = 太い線の白い輪郭円
         const p = padPointScreen();
         if (p) {
-          padCtx.fillStyle = "#fff";
-          padCtx.beginPath(); padCtx.arc(p.x, p.y, 5, 0, Math.PI * 2); padCtx.fill();
+          padCtx.strokeStyle = "#fff";
+          padCtx.lineWidth = 2.5;                       // ★線の太さ
+          padCtx.beginPath(); padCtx.arc(p.x, p.y, 5, 0, Math.PI * 2); padCtx.stroke();
         }
 
          // ドラッグ中だけ、点から右・下に線を伸ばして重みを表示
