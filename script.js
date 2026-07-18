@@ -5,6 +5,7 @@
 // =============================================================================
 const state = {
   sources: [],      // ★[A, B] 各 {name, joints, tracks, loopDur, scale}
+  active: [],       // ★頂点に使う種のインデックス列（順=角の順）
   phase: 0,         // ★0..1 の位相クロック
   weights: [1, 0, 0],   // ★各ソースの重み [bat, human, penguin]（内部で合計1に正規化）
   playing: true,
@@ -16,33 +17,11 @@ const state = {
 };
 
 // DOM
-const canvas   = document.getElementById("view");
-const ctx      = canvas.getContext("2d");
-const elEmpty  = document.getElementById("empty");
-const elFile   = document.getElementById("file");
-const elFrame  = document.getElementById("frame");
-const elFrameNo   = document.getElementById("frameNo");
-const elFrameTime = document.getElementById("frameTime");
-const elLines  = document.getElementById("lines");
-const elPlay   = document.getElementById("play");
-const elSmooth = document.getElementById("smooth");
-const elOffX     = document.getElementById("offX");
-const elOffY     = document.getElementById("offY");
-const elJointSel = document.getElementById("jointSel");
-const elJx       = document.getElementById("jx");
-const elJy       = document.getElementById("jy");
-const elResetAdj = document.getElementById("resetAdj");
-const elPad    = document.getElementById("pad");
-const elPadW   = document.getElementById("padW");
-const elSpeedA  = document.getElementById("speedA");
-const elSpeedB  = document.getElementById("speedB");
-const elSpAName = document.getElementById("spAName");
-const elSpBName = document.getElementById("spBName");
-const elSpAVal  = document.getElementById("spAVal");
-const elSpBVal  = document.getElementById("spBVal");
-const elSpeedC  = document.getElementById("speedC");
-const elSpCName = document.getElementById("spCName");
-const elSpCVal  = document.getElementById("spCVal");
+  const canvas  = document.getElementById("view");
+  const ctx     = canvas.getContext("2d");
+  const elEmpty = document.getElementById("empty");
+  const elPad   = document.getElementById("pad");
+  const elPadW  = document.getElementById("padW");
 
 // =============================================================================
 // 読み込み
@@ -53,7 +32,7 @@ const elSpCVal  = document.getElementById("spCVal");
 
 // 1つのJSONを「ソース」に前処理する（トラック・周期・体サイズ）
 function buildSource(data) {
-  const joints = data.joints || [];
+  const joints = activeSources()[0].joints;
   const fps = (data.capture && data.capture.fps) || 24;
   const loopDur = data.frames.length / fps;
 
@@ -85,67 +64,69 @@ function buildSource(data) {
   return { name: (data.species && data.species.name) || "?", joints, tracks, loopDur, scale };
 }
 
-// 起動時に2種を読み込む
-  Promise.all([
-    fetch("/data/bat.json").then(r => r.json()),
-    fetch("/data/Homo_sapience.json").then(r => r.json()),
-    fetch("/data/Aptenodytes_forsteri.json").then(r => r.json()),  // ペンギン追加
-  ]).then(([a, b, c]) => {
-    state.sources = [buildSource(a), buildSource(b), buildSource(c)];
-    state.sources[0].speed = 11;  // ★コウモリ
-    state.sources[1].speed = 1;   // ★ヒト
-    state.sources[2].speed = 1;   // ★ペンギン
-    state.sources[2].flipX = true;    // ★ペンギンは向きが逆 → 左右反転
-    state.sources[2].offsetY = 0.5;   // ★腰が体の下寄り → 少し下げて高さを揃える（+ = 下）
-    state.sources[2].sizeMul = 1.65;  // ★全高が小さい → 拡大して他種と揃える(2.47/1.51≈1.64)
-    initAfterLoad();
-  }).catch(err => { elEmpty.textContent = "読み込みエラー: " + err.message; });
-
-function initAfterLoad() {
-  fitCanvas();
-  populateJointSelect();
-  updatePanel();
-  elEmpty.style.display = "none";
-  elFrame.disabled = false;
-  state.phase = 0; state.playing = true; elPlay.textContent = "Pause";
+//list.json読み込み
+fetch("/data/list.json")
+    .then(r => r.json())
+    .then(list =>
+      Promise.all(list.map(item =>
+        fetch("/data/" + item.file).then(r => r.json()).then(data => ({ item, data }))
+      ))
+    ) 
+    .then(loaded => {
+      state.sources = loaded.map(({ item, data }) => {
+        const src = buildSource(data);
+        src.speed   = item.speed   ?? 1;      // 種ごとのカデンス
+        src.flipX   = item.flipX   ?? false;  // 向き反転
+        src.offsetY = item.offsetY ?? 0;      // 縦位置補正
+        src.sizeMul = item.sizeMul ?? 1;      // 見た目サイズ補正
+        return src; 
+      });
+      state.active = state.sources.map((_, i) => i);   // 初期は全種
+      initAfterLoad();
   
-  elSpeedA.value = state.sources[0].speed; elSpAVal.textContent = state.sources[0].speed;
-  elSpAName.textContent = state.sources[0].name;
-  if (state.sources[1]) {
-    elSpeedB.value = state.sources[1].speed; elSpBVal.textContent = state.sources[1].speed;
-    elSpBName.textContent = state.sources[1].name;
-  }
 
-  if (state.sources[2]) {
-      elSpeedC.value = state.sources[2].speed; elSpCVal.textContent =
-  state.sources[2].speed;
-      elSpCName.textContent = state.sources[2].name;
-    }
+      initAfterLoad();
+    })
+    .catch(err => { elEmpty.textContent = "読み込みエラー: " + err.message; });
+
+
+ function initAfterLoad() {
+    fitCanvas();
+    syncPadSize();                 // オーバーレイcanvasを画面サイズに合わせる
+    elEmpty.style.display = "none";
+    state.phase = 0; state.playing = true;
+    // 多角形の初期位置・大きさ（左下寄りに小さく配置）
+    state.padR = Math.min(elPad.clientWidth, elPad.clientHeight) * 0.16;
+    state.padCenter = { x: state.padR + 48, y: elPad.clientHeight - state.padR - 48 };
+    // 初期ブレンド点 = 先頭の種の頂点（＝先頭種がほぼ1）
+    const v0 = padVertices()[0];
+    state.padLocal = { x: (v0.x - state.padCenter.x) / state.padR,
+                       y: (v0.y - state.padCenter.y) / state.padR };
+    state.weights = padToWeights(v0.x, v0.y);
     elPadW.textContent = state.weights.map(w => w.toFixed(2)).join(" / ");
-    drawPad();
+    drawPad(); 
   }
 
-// =============================================================================
-// 座標変換: AE生座標 → 画面座標
-//   AEもCanvasも「原点=左上 / Y下向き」なのでY反転は不要。
-//   全フレーム・全関節のバウンディングボックスを一様拡大して中央に収める。
-// =============================================================================
 
-const lerp = (a, b, u) => a + (b - a) * u;
 
-// ループ境界をまたいで補間できるよう、前後に2点ずつ“折り返し”を足す
-function buildTrack(pts, loopDur) {
-  if (pts.length <= 1) return { single: true, p: pts[0] || { x: 0, y: 0 } };
-  const n = pts.length;
-  const sh = (p, d) => ({ t: p.t + d, x: p.x, y: p.y });
-  return {
-    aug: [
-      sh(pts[n - 2], -loopDur), sh(pts[n - 1], -loopDur),
-      ...pts,
-      sh(pts[0], +loopDur),     sh(pts[1], +loopDur),
-    ],
-  };
-}
+
+  const lerp = (a, b, u) => a + (b - a) * u;
+
+  // ループ境界をまたいで補間できるよう、前後に2点ずつ“折り返し”を足す
+  function buildTrack(pts, loopDur) {
+    if (pts.length <= 1) return { single: true, p: pts[0] || { x: 0, y: 0 } };
+    const n = pts.length;
+    const sh = (p, d) => ({ t: p.t + d, x: p.x, y: p.y });
+    return {
+      aug: [
+        sh(pts[n - 2], -loopDur), sh(pts[n - 1], -loopDur),
+        ...pts,
+        sh(pts[0], +loopDur),     sh(pts[1], +loopDur),
+      ],
+    };
+  }
+
+  
 
 // 時刻 t のときの、この関節の位置を返す
 function sampleTrack(tr, t, smooth) {
@@ -214,21 +195,27 @@ function centroid(raw, joints) {
   return n ? { x: x / n, y: y / n } : { x: 0, y: 0 };
 }
 
-  // 全ソースの正規化ポーズを、重み weights で加重平均。微調整もここで足す
+ 
+    // アクティブな種（＝多角形の各頂点）をソース配列で返す
+  function activeSources() {
+    return state.active.map(i => state.sources[i]);
+  }
+   // 全ソースの正規化ポーズを、重み weights で加重平均。微調整もここで足す
     // 各ソースを1回ずつ正規化（腰=原点・トルソ長=1）
     function blendedPose(phase, weights) {
-    const poses = state.sources.map(s => normalizedPose(s, phase));
-    const joints = state.sources[0].joints;   // 描画の基準は先頭ソースの関節集合（19共通）  
+    const act = activeSources();
+    const poses = act.map(s => normalizedPose(s, phase));
+    const joints = act[0].joints;                 // 基準の関節集合＝先頭のアクティブ種
     const out = {};
     for (const j of joints) {
       let x = 0, y = 0, wsum = 0;
-      for (let i = 0; i < state.sources.length; i++) {
+      for (let i = 0; i < act.length; i++) {
         const p = poses[i][j.name];
-        if (!p) continue;                     // その種がこの関節を持たない → 数に入れない
+        if (!p) continue;
         const w = weights[i] || 0;
         x += p.x * w; y += p.y * w; wsum += w;
-      } 
-      if (wsum > 0) { x /= wsum; y /= wsum; } // その関節を持つ種だけで重みを再正規化
+      }
+      if (wsum > 0) { x /= wsum; y /= wsum; }
       const adj = state.jointAdjust[j.name];
       if (adj) { x += adj.x; y += adj.y; }
       out[j.name] = { x, y };
@@ -238,79 +225,55 @@ function centroid(raw, joints) {
   
 
 // 正規化座標（トルソ長=1基準）→ 画面座標。中央に置き、offsetでずらす
-function normToScreen(x, y) {
-  const cw = canvas.clientWidth, ch = canvas.clientHeight;
-  const ds = Math.min(cw, ch) * 0.18;          // 表示倍率（必要なら調整）
-  return [ cw / 2 + (x + state.offset.x) * ds,
-           ch / 2 + (y + state.offset.y) * ds ];
-}
+function normToScreen(x, y, cx, cy) {
+    const ds = Math.min(canvas.clientWidth, canvas.clientHeight) * 0.234;
+    return [ cx + (x + state.offset.x) * ds,
+             cy + (y + state.offset.y) * ds ];
+  }
 
 // =============================================================================
 // 描画
 // =============================================================================
 
-function render(phase) {
-  const cw = canvas.clientWidth, ch = canvas.clientHeight;
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch);
-  if (!state.sources.length) return;
-
-  const pose = blendedPose(phase, state.weights);
-  const joints = state.sources[0].joints;
-
-  if (state.showLines) {
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+ // 1体ぶんのポーズを、画面上の中心 (cx, cy) に描く
+  function drawPose(pose, joints, cx, cy) {
+    if (state.showLines) {
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      for (const j of joints) {
+        if (!j.parent) continue;
+        const a = pose[j.name], b = pose[j.parent];
+        if (!a || !b) continue;
+        const [ax, ay] = normToScreen(a.x, a.y, cx, cy);
+        const [bx, by] = normToScreen(b.x, b.y, cx, cy);
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      }
+    }
+    ctx.fillStyle = "#fff";
     for (const j of joints) {
-      if (!j.parent) continue;
-      const a = pose[j.name], b = pose[j.parent];
-      if (!a || !b) continue;
-      const [ax, ay] = normToScreen(a.x, a.y);
-      const [bx, by] = normToScreen(b.x, b.y);
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      const p = pose[j.name];
+      const [sx, sy] = normToScreen(p.x, p.y, cx, cy);
+      ctx.beginPath(); ctx.arc(sx, sy, 3, 0, Math.PI * 2); ctx.fill();
     }
   }
 
-  ctx.fillStyle = "#fff";
-  for (const j of joints) {
-    const p = pose[j.name];
-    const [sx, sy] = normToScreen(p.x, p.y);
-    ctx.beginPath(); ctx.arc(sx, sy, 3, 0, Math.PI * 2); ctx.fill();
+function render(phase) {
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch);
+    if (!state.sources.length) return;
+    
+    const pose = blendedPose(phase, state.weights);
+    const joints = state.sources[0].joints;
+    
+   const COPIES = 3;              // ★横に並べる複製数
+    const STEP   = cw * 0.22;      // ★複製どうしの間隔（中心間の距離px）。増やすと広がる
+    const cy = ch * 0.58;          // ★やや下（0.5=中央。大きいほど下）
+    const cx0 = cw / 2 - STEP * (COPIES - 1) / 2;   // 群全体を中央寄せ
+    for (let k = 0; k < COPIES; k++) {
+      const cx = cx0 + STEP * k;
+      drawPose(pose, joints, cx, cy);
+    }
   }
-}
-
-// =============================================================================
-// パネル更新
-// =============================================================================
-
-function populateJointSelect() {
-  elJointSel.innerHTML = "";
-  for (const j of state.sources[0].joints) {
-    const o = document.createElement("option");
-    o.value = j.name; o.textContent = j.name;
-    elJointSel.appendChild(o);
-  }
-  loadJointSliders();
-}
-
-function loadJointSliders() {
-  const a = state.jointAdjust[elJointSel.value] || { x: 0, y: 0 };
-  elJx.value = a.x; elJy.value = a.y;
-}
-
-function updatePanel() {
-  const A = state.sources[0], B = state.sources[1];
-  document.getElementById("m-name").textContent   = A.name + (B ? " ⇄ " + B.name : "");
-  document.getElementById("m-fps").textContent    = "—";
-  document.getElementById("m-frames").textContent = A.joints.length + " joints";
-  document.getElementById("m-joints").textContent = state.sources.length + " sources";
-  document.getElementById("m-untracked").textContent = "—";
-  syncReadout();
-}
-
-function syncReadout() {
-  elFrameNo.textContent   = "phase " + state.phase.toFixed(3);
-  elFrameTime.textContent = "w " + state.weights.map(w => w.toFixed(2)).join("/");
-}
 
 // =============================================================================
 // 入力
@@ -323,18 +286,18 @@ function tick(ts) {
    if (state.playing && lastTs) {
         const dt = (ts - lastTs) / 1000;
         // 各種の「毎秒サイクル数」を重みで加重平均 → ブレンド中の再生レート
+        const act = activeSources();
         let rate = 0, wsum = 0;
-        for (let i = 0; i < state.sources.length; i++) {
-          const s = state.sources[i];
+        for (let i = 0; i < act.length; i++) {
+          const s = act[i]; 
           const w = state.weights[i] || 0;
           rate += ((s.speed || 1) / s.loopDur) * w; wsum += w;
-        } 
+        }
         if (wsum > 0) rate /= wsum;
         state.phase += dt * rate;
         state.phase %= 1; if (state.phase < 0) state.phase += 1;
       } 
     render(state.phase);
-    syncReadout();
   }
   lastTs = ts;
   requestAnimationFrame(tick);
@@ -342,122 +305,204 @@ function tick(ts) {
 
 requestAnimationFrame(tick); 
 
-elPlay.addEventListener("click", () => {
-  state.playing = !state.playing;
-  elPlay.textContent = state.playing ? "Pause" : "Play";
-});
-elSpeedC.addEventListener("input", () => {
-    if (!state.sources[2]) return;
-    state.sources[2].speed = parseFloat(elSpeedC.value);
-    elSpCVal.textContent = state.sources[2].speed.toFixed(1);
+  window.addEventListener("resize", () => {
+    if (!state.sources.length) return;
+    fitCanvas();
+    syncPadSize(); drawPad();   // ブラウザリサイズ・DPR変化にも追従
   });
-elFrame.addEventListener("input", () => {                 // スクラブ＝位相シーク
-  state.playing = false; elPlay.textContent = "Play";
-  state.phase = parseInt(elFrame.value, 10) / 1000;
-});
 
 
-
-elSpeedA.addEventListener("input", () => {
-  state.sources[0].speed = parseFloat(elSpeedA.value);
-  elSpAVal.textContent = state.sources[0].speed.toFixed(1);
-});
-elSpeedB.addEventListener("input", () => {
-  if (!state.sources[1]) return;
-  state.sources[1].speed = parseFloat(elSpeedB.value);
-  elSpBVal.textContent = state.sources[1].speed.toFixed(1);
-});
-
-elSmooth.addEventListener("change", () => { state.smooth = elSmooth.checked; });
-elLines.addEventListener("change",  () => { state.showLines = elLines.checked; });
-
-elOffX.addEventListener("input", () => { state.offset.x = parseFloat(elOffX.value); });
-elOffY.addEventListener("input", () => { state.offset.y = parseFloat(elOffY.value); });
-
-elJointSel.addEventListener("change", loadJointSliders);
-function applyJointAdjust() {
-  state.jointAdjust[elJointSel.value] = { x: parseFloat(elJx.value), y: parseFloat(elJy.value) };
-}
-elJx.addEventListener("input", applyJointAdjust);
-elJy.addEventListener("input", applyJointAdjust);
-
-elResetAdj.addEventListener("click", () => {
-  state.offset = { x: 0, y: 0 };
-  state.jointAdjust = {};
-  elOffX.value = 0; elOffY.value = 0;
-  elJx.value = 0; elJy.value = 0;
-});
-
-window.addEventListener("resize", () => { if (state.sources.length) fitCanvas(); });
-
-
-  // =============================================================================
-  // 三角ブレンドパッド（重心座標で3種の重みを出す）
-  //   頂点0=左下, 頂点1=右下, 頂点2=上。並びは state.sources [bat, human, penguin]
-  // =============================================================================
-
-  const padCtx = elPad.getContext("2d");
-  const PAD_W = elPad.width, PAD_H = elPad.height, PAD_PAD = 24;
-  const padVerts = [
-    { x: PAD_PAD,         y: PAD_H - PAD_PAD },  // 0: 左下
-    { x: PAD_W - PAD_PAD, y: PAD_H - PAD_PAD },  // 1: 右下
-    { x: PAD_W / 2,       y: PAD_PAD },          // 2: 上
-  ];
-
-  // 点(px,py) → 3重み。三角の外は負が出るので0にクランプして再正規化＝常に合計1
-  function padToWeights(px, py) {
-    const [A, B, C] = padVerts;
-    const den = (B.y - C.y) * (A.x - C.x) + (C.x - B.x) * (A.y - C.y);
-    let w0 = ((B.y - C.y) * (px - C.x) + (C.x - B.x) * (py - C.y)) / den;
-    let w1 = ((C.y - A.y) * (px - C.x) + (A.x - C.x) * (py - C.y)) / den;
-    let w2 = 1 - w0 - w1;
-    w0 = Math.max(0, w0); w1 = Math.max(0, w1); w2 = Math.max(0, w2);
-    const s = w0 + w1 + w2 || 1;
-    return [w0 / s, w1 / s, w2 / s];
-  }
-
-  // 3重み → 点（表示用）: w0·V0 + w1·V1 + w2·V2
-  function weightsToPad(w) {
-    return {
-      x: w[0]*padVerts[0].x + w[1]*padVerts[1].x + w[2]*padVerts[2].x,
-      y: w[0]*padVerts[0].y + w[1]*padVerts[1].y + w[2]*padVerts[2].y,
-    };
-  }
+     // =============================================================================
+    // ブレンドパッド：種の多角形そのものがフレーム
+    //   角(頂点)を掴む → 拡大縮小 / 辺を掴む → 移動 / 内側 → ブレンド点
+    //   画面全体の透明オーバーレイに描画（背景のBMが透ける）
+    // =============================================================================
   
-  function drawPad() {
-    padCtx.fillStyle = "#000"; padCtx.fillRect(0, 0, PAD_W, PAD_H);
-    padCtx.strokeStyle = "rgba(255,255,255,0.5)"; padCtx.lineWidth = 1;
-    padCtx.beginPath();
-    padCtx.moveTo(padVerts[0].x, padVerts[0].y);
-    padCtx.lineTo(padVerts[1].x, padVerts[1].y);
-    padCtx.lineTo(padVerts[2].x, padVerts[2].y);
-    padCtx.closePath(); padCtx.stroke();
+    const padCtx = elPad.getContext("2d");
 
-    padCtx.fillStyle = "#aaa"; padCtx.font = "10px monospace";
-    const nm = state.sources.map(s => s.name.slice(0, 6));
-    padCtx.textAlign = "left";   padCtx.fillText(nm[0] || "A", 2, PAD_H - 6);
-    padCtx.textAlign = "right";  padCtx.fillText(nm[1] || "B", PAD_W - 2, PAD_H
-  - 6);
-    padCtx.textAlign = "center"; padCtx.fillText(nm[2] || "C", PAD_W / 2,
-  PAD_PAD - 8);
-
-    const p = weightsToPad(state.weights);
-    padCtx.fillStyle = "#fff";
-    padCtx.beginPath(); padCtx.arc(p.x, p.y, 4, 0, Math.PI * 2); padCtx.fill();
-  }
-
-  // ドラッグで重みを設定（CSS拡大されていても内部解像度に変換）
-  function padSet(ev) {
-    const r = elPad.getBoundingClientRect();
-    const px = (ev.clientX - r.left) * (PAD_W / r.width);
-    const py = (ev.clientY - r.top)  * (PAD_H / r.height);
-    state.weights = padToWeights(px, py);
-    elPadW.textContent = state.weights.map(w => w.toFixed(2)).join(" / ");
-    drawPad();
-  }
+    // オーバーレイcanvasの内部解像度を画面サイズ×DPRに合わせる
+    function syncPadSize() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = elPad.clientWidth, h = elPad.clientHeight;
+      elPad.width  = Math.max(1, Math.round(w * dpr));
+      elPad.height = Math.max(1, Math.round(h * dpr));
+      padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);  // 以降は論理px(CSS px)で描ける
+    }
   
-  let padDragging = false;
-  elPad.addEventListener("pointerdown", (e) => { padDragging = true;
-  elPad.setPointerCapture(e.pointerId); padSet(e); });
-  elPad.addEventListener("pointermove", (e) => { if (padDragging) padSet(e); });
-  elPad.addEventListener("pointerup",   () => { padDragging = false; });
+    // 中心 state.padCenter・半径 state.padR から正N角形の頂点（頂点0=真上）
+ function padVertices() {
+        const n = state.active.length || 1;
+        const { x: cx, y: cy } = state.padCenter;
+        const R = state.padR;   
+        // 偶数角形は半ステップ回して辺を水平に（地面と平行）。奇数は頂点が上＝底辺が水平
+        const rot = (n % 2 === 0) ? Math.PI / n : 0;
+        const verts = [];
+        for (let i = 0; i < n; i++) {
+          const a = -Math.PI / 2 + rot + (i / n) * Math.PI * 2;
+          verts.push({ x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) });
+        }
+        return verts; 
+      }
+
+
+    // 点(px,py) → N重み。各頂点までの距離の逆二乗で加重し、合計1に正規化
+    function padToWeights(px, py) {
+      const verts = padVertices(); 
+      const raw = verts.map(v => 1 / Math.max((px - v.x) ** 2 + (py - v.y) ** 2, 1e-6));
+      const s = raw.reduce((a, b) => a + b, 0) || 1;
+      return raw.map(w => w / s);
+    }
+
+    // ブレンド操作点の画面座標（中心＋ローカル×半径）。移動・リサイズに追従
+    function padPointScreen() {
+      if (!state.padLocal) return null;
+      return { x: state.padCenter.x + state.padLocal.x * state.padR,
+               y: state.padCenter.y + state.padLocal.y * state.padR };
+    }
+
+    // "Aptenodytes forsteri" / "Homo_sapience" → "A. forsteri" / "H. sapience"
+      function abbrevName(name) {
+        const parts = (name || "").trim().split(/[\s_]+/).filter(Boolean);
+        if (parts.length >= 2) return parts[0][0].toUpperCase() + ". " + parts[1];
+        return parts[0] || "?";
+      }
+
+
+
+    function drawPad() {
+        padCtx.clearRect(0, 0, elPad.clientWidth, elPad.clientHeight);  // 透明クリア
+        const verts = padVertices();
+
+        // 多角形の輪郭（細い白線）＝“枠”
+        padCtx.strokeStyle = "rgba(255,255,255,0.6)"; padCtx.lineWidth = 1;
+        padCtx.beginPath();
+        verts.forEach((v, i) => i ? padCtx.lineTo(v.x, v.y) : padCtx.moveTo(v.x, v.y));
+        padCtx.closePath(); padCtx.stroke();
+
+        // 各種の頂点 = 白点 ＋ 種名
+        const act = activeSources();
+        padCtx.font = "10px monospace"; padCtx.textAlign = "center";
+        verts.forEach((v, i) => {
+          // 掴み範囲リング
+          padCtx.strokeStyle = "rgba(255,255,255,0.18)"; padCtx.lineWidth = 1;
+          padCtx.beginPath(); padCtx.arc(v.x, v.y, VERTEX_GRAB, 0, Math.PI * 2);
+  padCtx.stroke();
+          // 頂点の白点
+          padCtx.fillStyle = "#fff";
+          padCtx.beginPath(); padCtx.arc(v.x, v.y, 4, 0, Math.PI * 2); padCtx.fill();
+          // 種名（属頭文字＋種小名）
+          padCtx.fillStyle = "#aaa";
+          padCtx.fillText(abbrevName(act[i] && act[i].name), v.x, v.y - 9);
+        });
+
+        // ブレンド操作点 = 白単色（少し大きめで種の点と区別）
+        const p = padPointScreen();
+        if (p) {
+          padCtx.fillStyle = "#fff";
+          padCtx.beginPath(); padCtx.arc(p.x, p.y, 5, 0, Math.PI * 2); padCtx.fill();
+        }
+      }
+
+    // ---- ヒットテスト用の幾何 ----
+    function padXY(ev) { const r = elPad.getBoundingClientRect(); return { x: ev.clientX -
+  r.left, y: ev.clientY - r.top }; }
+  
+    function distToSegment(p, a, b) {           // 点pと線分ab の距離
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy || 1e-6;
+      let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    }
+
+    // 点pに最も近い、線分ab上の点を返す
+      function closestOnSegment(p, a, b) {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy || 1e-6;
+        let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        return { x: a.x + t * dx, y: a.y + t * dy };
+      }
+
+      // pが多角形の外なら、最も近い辺上の点に丸めて返す（内ならそのまま）
+      function clampToPoly(p, verts) {
+        if (pointInPoly(p, verts)) return p;
+        let best = p, bd = Infinity;
+        for (let i = 0; i < verts.length; i++) {
+          const c = closestOnSegment(p, verts[i], verts[(i + 1) % verts.length]);
+          const d = Math.hypot(p.x - c.x, p.y - c.y);
+          if (d < bd) { bd = d; best = c; }        // return値は同じ行、の原則を維持
+        }
+        return best;
+      }
+
+    function pointInPoly(p, verts) {            // 多角形の内外判定（レイキャスト）
+      let inside = false;
+      for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+        const a = verts[i], b = verts[j];
+        if (((a.y > p.y) !== (b.y > p.y)) &&
+            (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) inside = !inside;
+      }
+      return inside;  
+    }
+
+    // マウス位置から操作モードを判定: 'resize' | 'move' | 'blend' | null
+    const VERTEX_GRAB = 22, EDGE_GRAB = 16;
+    function padHit(p) {
+      const verts = padVertices(); 
+      for (const v of verts) if (Math.hypot(p.x - v.x, p.y - v.y) <= VERTEX_GRAB) return "resize";  // 角
+      for (let i = 0; i < verts.length; i++)
+        if (distToSegment(p, verts[i], verts[(i + 1) % verts.length]) <= EDGE_GRAB) return "move";  // 辺
+      if (pointInPoly(p, verts)) return "blend";
+        // 内側
+      return null;
+        // 外側
+    }
+
+   function setBlend(p) {
+        const q = clampToPoly(p, padVertices());   // ★図形の外に出さない
+        state.padLocal = { x: (q.x - state.padCenter.x) / state.padR,
+                           y: (q.y - state.padCenter.y) / state.padR };
+        state.weights = padToWeights(q.x, q.y);
+        elPadW.textContent = state.weights.map(w => w.toFixed(2)).join(" / ");
+        drawPad();
+      }
+
+  
+     // ---- 操作 ----
+      let padMode = null, moveGrab = null;
+      elPad.addEventListener("pointerdown", (e) => {
+        e.preventDefault();            // ★ネイティブのドラッグ/選択を止める
+        const p = padXY(e);            
+        padMode = padHit(p);
+        // console.log("[pad] down:", padMode);   // ★診断（後で消す）
+        if (!padMode) return;                       // 図形の外 → 何もしない
+        elPad.setPointerCapture(e.pointerId);       
+        if (padMode === "move") moveGrab = { dx: p.x - state.padCenter.x, dy: p.y -
+  state.padCenter.y };
+        if (padMode === "blend") setBlend(p);
+
+
+    });
+    elPad.addEventListener("pointermove", (e) => {
+      const p = padXY(e);
+      if (!padMode) {                             // 非ドラッグ時 → カーソル形状だけ更新
+        const hit = padHit(p);
+        elPad.style.cursor = hit === "resize" ? "nwse-resize"
+                           : hit === "move"   ? "move"
+                           : hit === "blend"  ? "crosshair" : "default";
+        return;
+      }
+      if (padMode === "resize") {                 // 角ドラッグ → 中心からの距離を半径に
+          // console.log("[pad] resize drag");         // ★診断（後で消す）
+          state.padR = Math.max(30, Math.hypot(p.x - state.padCenter.x, p.y -
+  state.padCenter.y));
+          drawPad();
+      } else if (padMode === "move") {            // 辺ドラッグ → 図形ごと平行移動
+        state.padCenter = { x: p.x - moveGrab.dx, y: p.y - moveGrab.dy };
+        drawPad();
+      } else if (padMode === "blend") {           // 内側ドラッグ → ブレンド点
+        setBlend(p);
+      }
+    });
+    elPad.addEventListener("pointerup", () => { padMode = null; });
