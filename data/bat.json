@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "joint_definition": "vertebrate_v1",
-  "species": { "name": "Pipistrellus_abramus", "name_sci": null, "taxon_id": null },
+  "species": { "name": "Alionoctula_abramus", "name_sci": null, "taxon_id": null },
   "capture": { "fps": 23.9759979248047, "frame_count": 45, "duration_sec": 1.876877, "coordinate_system": "AE_raw", "view": null, "direction": null, "scale_ref_px": null },
   "joints": [
     { "name": "head", "parent": "neck", "in_vocabulary": true, "source": "measured" },

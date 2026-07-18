@@ -82,9 +82,9 @@
         transform-origin: top right;
         display: flex; flex-direction: column; gap: 10px;
         padding: 12px 14px;
-        background: rgba(0,0,0,0.5);
+        background: transparent;
         border: 1px solid var(--hair);
-        border-radius: 6px;
+
         font-family: var(--mono); font-size: 12px; color: #fff;
         min-width: 168px;
       }
@@ -96,7 +96,7 @@
    .su-btn {
         width: 34px; height: 34px; line-height: 1;
         border: 1px solid var(--hair); background: transparent; color: #fff;
-        cursor: pointer; border-radius: 4px; font-family: var(--mono); font-size: 18px;
+        cursor: pointer;  font-family: var(--mono); font-size: 18px;
         touch-action: manipulation;          /* ダブルタップズーム抑止・反応を速く */
       }
     .su-btn:hover { border-color: var(--line); }
@@ -108,7 +108,7 @@
     .su-sel {
         flex: 1; appearance: none; -webkit-appearance: none;
         background: #000; color: #fff; border: 1px solid var(--hair);
-        border-radius: 4px; padding: 8px; font-family: var(--mono); font-size: 13px;
+        padding: 8px; font-family: var(--mono); font-size: 13px;
         min-height: 36px;
       }
     .su-sel:hover { border-color: var(--line); }
@@ -118,3 +118,14 @@
         position: absolute; left: 0; bottom: 0; width: 28px; height: 28px;
         cursor: nesw-resize; touch-action: none;
       } 
+
+      .su-nametoggle {
+      display: flex; border: 1px solid var(--hair); border-radius: 4px; overflow: hidden;
+    }
+    .su-tg {
+      flex: 1; padding: 7px 4px; background: transparent; color: var(--dim);
+      border: none; font-family: var(--mono); font-size: 11px; cursor: pointer;
+      touch-action: manipulation;
+    }
+    .su-tg + .su-tg { border-left: 1px solid var(--hair); }
+    .su-tg.active { background: rgba(255,255,255,0.12); color: #fff; }

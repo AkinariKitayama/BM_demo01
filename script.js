@@ -15,6 +15,7 @@ const state = {
   smooth: true,
   showLines: true,
   morph: null,      // 角数変化のモーフ中の状態
+   nameMode: "sci",   // ラベル表示: "sci"=学名 / "wa"=和名
 };
 
 // DOM
@@ -85,6 +86,7 @@ function buildSource(data) {
         src.flipX   = item.flipX   ?? false;  // 向き反転
         src.offsetY = item.offsetY ?? 0;      // 縦位置補正
         src.sizeMul = item.sizeMul ?? 1;      // 見た目サイズ補正
+          src.waname  = item.waname  ?? null;   // ★和名（list.jsonから）
         return src; 
       });
       state.active = state.sources.map((_, i) => i);   // 初期は全種
@@ -269,7 +271,7 @@ function render(phase) {
     const pose = blendedPose(phase, state.weights);
       const joints = activeSources()[0].joints;
     
-   const COPIES = 1;              // ★横に並べる複製数
+   const COPIES = 3;              // ★横に並べる複製数
     const STEP   = cw * 0.32;      // ★複製どうしの間隔（中心間の距離px）。増やすと広がる
     const cy = ch * 0.58;          // ★やや下（0.5=中央。大きいほど下）
     const cx0 = cw / 2 - STEP * (COPIES - 1) / 2;   // 群全体を中央寄せ
@@ -372,6 +374,12 @@ requestAnimationFrame(tick);
         return parts[0] || "?";
       }
 
+      function sourceLabel(src) {
+        if (!src) return "?";
+        if (state.nameMode === "wa" && src.waname) return src.waname;
+        return abbrevName(src.name);
+      }
+
 function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
       // モーフ中の表示頂点（from→to をイーズ補間）
@@ -403,7 +411,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
           padCtx.fillStyle = "#fff";
           padCtx.beginPath(); padCtx.arc(v.x, v.y, 4, 0, Math.PI * 2); padCtx.fill();
           padCtx.fillStyle = "#aaa";
-          padCtx.fillText(abbrevName(act[i] && act[i].name), v.x, v.y - 9);
+           padCtx.fillText(sourceLabel(act[i]), v.x, v.y - 9);
         });
   
         // ブレンド操作点（白）
@@ -503,7 +511,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
           sel.className = "su-sel";
           state.sources.forEach((s, si) => {
             const o = document.createElement("option");
-            o.value = si; o.textContent = abbrevName(s.name);
+            o.value = si; o.textContent = sourceLabel(s);
             if (si === srcIdx) o.selected = true;
             sel.appendChild(o);
           });
@@ -522,6 +530,18 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
         setBlend(padPointScreen() || verts[0]);   // clamp込みで padLocal/weights/描画を更新
         rebuildShapeUI();
       }
+
+      const nameSci = document.getElementById("nameSci");
+      const nameWa  = document.getElementById("nameWa");
+      function setNameMode(mode) {
+        state.nameMode = mode;
+        nameSci.classList.toggle("active", mode === "sci");
+        nameWa.classList.toggle("active",  mode === "wa");
+        drawPad();          // パッドのラベル更新
+        rebuildShapeUI();   // セレクトのラベル更新
+      }
+      nameSci.addEventListener("click", () => setNameMode("sci"));
+      nameWa.addEventListener("click",  () => setNameMode("wa"));
 
       function shapeInc() {
           if (state.active.length >= state.sources.length) return;
