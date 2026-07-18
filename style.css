@@ -120,7 +120,7 @@
       } 
 
       .su-nametoggle {
-      display: flex; border: 1px solid var(--hair); border-radius: 4px; overflow: hidden;
+      display: flex; border: 1px solid var(--hair);  overflow: hidden;
     }
     .su-tg {
       flex: 1; padding: 7px 4px; background: transparent; color: var(--dim);
