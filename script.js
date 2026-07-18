@@ -14,6 +14,7 @@ const state = {
   jointAdjust: {},          // 関節ごとの微調整（正規化空間）
   smooth: true,
   showLines: true,
+  morph: null,      // 角数変化のモーフ中の状態
 };
 
 // DOM
@@ -22,6 +23,11 @@ const state = {
   const elEmpty = document.getElementById("empty");
   const elPad   = document.getElementById("pad");
   const elPadW  = document.getElementById("padW");
+
+  const suN    = document.getElementById("suN");
+  const suList = document.getElementById("suList");
+  const suInc  = document.getElementById("suInc");
+  const suDec  = document.getElementById("suDec");
 
 // =============================================================================
 // 読み込み
@@ -32,7 +38,7 @@ const state = {
 
 // 1つのJSONを「ソース」に前処理する（トラック・周期・体サイズ）
 function buildSource(data) {
-  const joints = activeSources()[0].joints;
+    const joints = data.joints || [];
   const fps = (data.capture && data.capture.fps) || 24;
   const loopDur = data.frames.length / fps;
 
@@ -94,7 +100,7 @@ fetch("/data/list.json")
     state.phase = 0; state.playing = true;
     // 多角形の初期位置・大きさ（左下寄りに小さく配置）
     state.padR = Math.min(elPad.clientWidth, elPad.clientHeight) * 0.16;
-    state.padCenter = { x: state.padR + 48, y: elPad.clientHeight - state.padR - 48 };
+   state.padCenter = { x: state.padR + 48, y: state.padR + 56 };
     // 初期ブレンド点 = 先頭の種の頂点（＝先頭種がほぼ1）
     const v0 = padVertices()[0];
     state.padLocal = { x: (v0.x - state.padCenter.x) / state.padR,
@@ -102,6 +108,7 @@ fetch("/data/list.json")
     state.weights = padToWeights(v0.x, v0.y);
     elPadW.textContent = state.weights.map(w => w.toFixed(2)).join(" / ");
     drawPad(); 
+    rebuildShapeUI();
   }
 
 
@@ -260,7 +267,7 @@ function render(phase) {
     if (!state.sources.length) return;
     
     const pose = blendedPose(phase, state.weights);
-    const joints = state.sources[0].joints;
+      const joints = activeSources()[0].joints;
     
    const COPIES = 3;              // ★横に並べる複製数
     const STEP   = cw * 0.22;      // ★複製どうしの間隔（中心間の距離px）。増やすと広がる
@@ -365,41 +372,48 @@ requestAnimationFrame(tick);
         return parts[0] || "?";
       }
 
+function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
+      // モーフ中の表示頂点（from→to をイーズ補間）
+      function morphVerts() {
+        let t = (performance.now() - state.morph.start) / state.morph.dur;
+        t = easeInOut(Math.max(0, Math.min(1, t)));
+        const { from, to } = state.morph;
+        return to.map((v, i) => ({ x: lerp(from[i].x, v.x, t), y: lerp(from[i].y, v.y, t)
+  }));
+      }
 
     function drawPad() {
-        padCtx.clearRect(0, 0, elPad.clientWidth, elPad.clientHeight);  // 透明クリア
+        padCtx.clearRect(0, 0, elPad.clientWidth, elPad.clientHeight);
         const verts = padVertices();
 
-        // 多角形の輪郭（細い白線）＝“枠”
+        // 多角形の輪郭
         padCtx.strokeStyle = "rgba(255,255,255,0.6)"; padCtx.lineWidth = 1;
         padCtx.beginPath();
         verts.forEach((v, i) => i ? padCtx.lineTo(v.x, v.y) : padCtx.moveTo(v.x, v.y));
         padCtx.closePath(); padCtx.stroke();
 
-        // 各種の頂点 = 白点 ＋ 種名
+        // 頂点＝白点（＋掴みリング）。種名はモーフ中は省略（頂点数が過渡的に合わないため）
         const act = activeSources();
         padCtx.font = "10px monospace"; padCtx.textAlign = "center";
         verts.forEach((v, i) => {
-          // 掴み範囲リング
           padCtx.strokeStyle = "rgba(255,255,255,0.18)"; padCtx.lineWidth = 1;
           padCtx.beginPath(); padCtx.arc(v.x, v.y, VERTEX_GRAB, 0, Math.PI * 2);
   padCtx.stroke();
-          // 頂点の白点
           padCtx.fillStyle = "#fff";
           padCtx.beginPath(); padCtx.arc(v.x, v.y, 4, 0, Math.PI * 2); padCtx.fill();
-          // 種名（属頭文字＋種小名）
           padCtx.fillStyle = "#aaa";
           padCtx.fillText(abbrevName(act[i] && act[i].name), v.x, v.y - 9);
         });
-
-        // ブレンド操作点 = 白単色（少し大きめで種の点と区別）
+  
+        // ブレンド操作点（白）
         const p = padPointScreen();
         if (p) {
           padCtx.fillStyle = "#fff";
           padCtx.beginPath(); padCtx.arc(p.x, p.y, 5, 0, Math.PI * 2); padCtx.fill();
         }
       }
+
 
     // ---- ヒットテスト用の幾何 ----
     function padXY(ev) { const r = elPad.getBoundingClientRect(); return { x: ev.clientX -
@@ -446,16 +460,24 @@ requestAnimationFrame(tick);
 
     // マウス位置から操作モードを判定: 'resize' | 'move' | 'blend' | null
     const VERTEX_GRAB = 22, EDGE_GRAB = 16;
-    function padHit(p) {
-      const verts = padVertices(); 
-      for (const v of verts) if (Math.hypot(p.x - v.x, p.y - v.y) <= VERTEX_GRAB) return "resize";  // 角
-      for (let i = 0; i < verts.length; i++)
-        if (distToSegment(p, verts[i], verts[(i + 1) % verts.length]) <= EDGE_GRAB) return "move";  // 辺
-      if (pointInPoly(p, verts)) return "blend";
-        // 内側
-      return null;
-        // 外側
-    }
+     function padHit(p) {
+        const verts = padVertices();
+        if (verts.length < 2) return null;
+        // 角 → resize（最優先）
+        for (const v of verts) if (Math.hypot(p.x - v.x, p.y - v.y) <= VERTEX_GRAB) return
+  "resize";
+        // 2頂点＝線分は内側が無いので、線の近く＝ブレンド（線上に投影される）
+        if (verts.length === 2) {
+          return distToSegment(p, verts[0], verts[1]) <= EDGE_GRAB * 2 ? "blend" : null;
+        }
+        // 辺 → move
+        for (let i = 0; i < verts.length; i++)
+          if (distToSegment(p, verts[i], verts[(i + 1) % verts.length]) <= EDGE_GRAB) return
+  "move";
+        // 内側 → blend
+        if (pointInPoly(p, verts)) return "blend";
+        return null;
+      }
 
    function setBlend(p) {
         const q = clampToPoly(p, padVertices());   // ★図形の外に出さない
@@ -465,6 +487,81 @@ requestAnimationFrame(tick);
         elPadW.textContent = state.weights.map(w => w.toFixed(2)).join(" / ");
         drawPad();
       }
+
+
+      // 左下UI：角数と各角の種セレクトを組み立て直す
+      function rebuildShapeUI() {
+        suN.textContent = state.active.length;
+        suList.innerHTML = "";
+        state.active.forEach((srcIdx, corner) => {
+          const row = document.createElement("div");
+          row.className = "su-item";
+          const dot = document.createElement("span");
+          dot.className = "su-dot";
+          const sel = document.createElement("select");
+          sel.className = "su-sel";
+          state.sources.forEach((s, si) => {
+            const o = document.createElement("option");
+            o.value = si; o.textContent = abbrevName(s.name);
+            if (si === srcIdx) o.selected = true;
+            sel.appendChild(o);
+          });
+          sel.addEventListener("change", () => {
+            state.active[corner] = parseInt(sel.value, 10);   // その角の種を差し替え
+            applyShapeChange();
+          });
+          row.appendChild(dot); row.appendChild(sel);
+          suList.appendChild(row);
+        });
+      }
+  
+      // 頂点集合が変わったら重みを取り直して再描画（操作点は維持）＋UI再構築
+      function applyShapeChange() {
+        const verts = padVertices();
+        setBlend(padPointScreen() || verts[0]);   // clamp込みで padLocal/weights/描画を更新
+        rebuildShapeUI();
+      }
+
+      function shapeInc() {
+          if (state.active.length >= state.sources.length) return;
+          let idx = state.sources.findIndex((_, i) => !state.active.includes(i));
+          if (idx < 0) idx = 0;
+          state.active.push(idx);
+          applyShapeChange();
+        } 
+        function shapeDec() {
+          if (state.active.length <= 2) return;
+          state.active.pop();
+          applyShapeChange();
+        }
+
+      
+      // 角数変化：旧→新の頂点をイーズ補間。増減で足りない頂点は中心で出入りさせる
+      function onCornerCountChange(oldVerts) {
+        const newVerts = padVertices();                 // 新しい角数の頂点
+        const c = state.padCenter;
+        const M = Math.max(oldVerts.length, newVerts.length);
+        const pad = (arr) => Array.from({ length: M }, (_, i) => arr[i] || { x: c.x, y: c.y
+  });   
+        state.morph = { from: pad(oldVerts), to: pad(newVerts), start: performance.now(),
+  dur: 350 };
+        setBlend(padPointScreen() || newVerts[0]);      // 重み・操作点は新形状で更新
+        rebuildShapeUI();
+        requestAnimationFrame(morphTick);
+      } 
+      
+      // モーフ中だけ回す描画ループ
+      function morphTick() {
+        if (!state.morph) return;
+        drawPad();
+        if (performance.now() - state.morph.start >= state.morph.dur) {
+          state.morph = null; 
+          drawPad();                                    // 最終形状で確定描画（ラベル復帰）
+        } else {
+          requestAnimationFrame(morphTick);
+        }
+      }
+
 
   
      // ---- 操作 ----
@@ -504,3 +601,29 @@ requestAnimationFrame(tick);
       }
     });
     elPad.addEventListener("pointerup", () => { padMode = null; });
+
+    suInc.addEventListener("click", shapeInc);
+      suDec.addEventListener("click", shapeDec);
+
+       // 図形設定パネルを左下の角ドラッグでスケール（右上基準）
+      const shapeUI  = document.getElementById("shapeUI");
+      const suResize = document.getElementById("su-resize");
+      let shapeScale = 1, suRez = null;
+
+      suResize.addEventListener("pointerdown", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const r = shapeUI.getBoundingClientRect();
+        const anchorX = r.right, anchorY = r.top;               // 右上＝スケール不変点
+        const d0 = Math.hypot(e.clientX - anchorX, e.clientY - anchorY) || 1;
+        suRez = { anchorX, anchorY, d0, s0: shapeScale };
+        suResize.setPointerCapture(e.pointerId);
+      });
+      suResize.addEventListener("pointermove", (e) => {
+        if (!suRez) return;
+        const d = Math.hypot(e.clientX - suRez.anchorX, e.clientY - suRez.anchorY);
+        shapeScale = Math.max(0.6, Math.min(2.5, suRez.s0 * d / suRez.d0));  // 右上からの距離比で拡縮
+        shapeUI.style.transform = `scale(${shapeScale})`;
+      });
+      suResize.addEventListener("pointerup", () => { suRez = null; });
+    
+  

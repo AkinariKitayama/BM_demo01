@@ -3,5 +3,5 @@
     { "file": "Homo_sapience.json", "speed": 1 },
     { "file": "Aptenodytes_forsteri.json", "speed": 1, "flipX": true, "offsetX": 1.3, "offsetY": 0.7,
   "sizeMul": 1.65 },
-   { "file": "_Astrochelys_radiata.json", "speed": 1 ,  "offsetY": 0.3, "sizeMul": 1.3}
+   { "file": "_Astrochelys_radiata.json", "speed": 1 ,  "offsetY": 0.1, "sizeMul": 1.3}
 ]
