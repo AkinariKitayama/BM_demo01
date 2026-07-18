@@ -269,8 +269,8 @@ function render(phase) {
     const pose = blendedPose(phase, state.weights);
       const joints = activeSources()[0].joints;
     
-   const COPIES = 3;              // ★横に並べる複製数
-    const STEP   = cw * 0.22;      // ★複製どうしの間隔（中心間の距離px）。増やすと広がる
+   const COPIES = 1;              // ★横に並べる複製数
+    const STEP   = cw * 0.32;      // ★複製どうしの間隔（中心間の距離px）。増やすと広がる
     const cy = ch * 0.58;          // ★やや下（0.5=中央。大きいほど下）
     const cx0 = cw / 2 - STEP * (COPIES - 1) / 2;   // 群全体を中央寄せ
     for (let k = 0; k < COPIES; k++) {
@@ -459,7 +459,8 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
     }
 
     // マウス位置から操作モードを判定: 'resize' | 'move' | 'blend' | null
-    const VERTEX_GRAB = 22, EDGE_GRAB = 16;
+      const VERTEX_GRAB = 30, EDGE_GRAB = 24;
+
      function padHit(p) {
         const verts = padVertices();
         if (verts.length < 2) return null;
@@ -613,17 +614,15 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
       suResize.addEventListener("pointerdown", (e) => {
         e.preventDefault(); e.stopPropagation();
         const r = shapeUI.getBoundingClientRect();
-        const anchorX = r.right, anchorY = r.top;               // 右上＝スケール不変点
-        const d0 = Math.hypot(e.clientX - anchorX, e.clientY - anchorY) || 1;
-        suRez = { anchorX, anchorY, d0, s0: shapeScale };
-        suResize.setPointerCapture(e.pointerId);
+        suRez = { anchorX: r.right, anchorY: r.top,
+                  d0: Math.hypot(e.clientX - r.right, e.clientY - r.top) || 1, s0: shapeScale
+  };              
       });
-      suResize.addEventListener("pointermove", (e) => {
+      window.addEventListener("pointermove", (e) => {
         if (!suRez) return;
         const d = Math.hypot(e.clientX - suRez.anchorX, e.clientY - suRez.anchorY);
-        shapeScale = Math.max(0.6, Math.min(2.5, suRez.s0 * d / suRez.d0));  // 右上からの距離比で拡縮
-        shapeUI.style.transform = `scale(${shapeScale})`;
+        shapeScale = Math.max(0.6, Math.min(2.5, suRez.s0 * d / suRez.d0));
+        shapeUI.style.transform = `scale(${shapeScale})`; 
       });
-      suResize.addEventListener("pointerup", () => { suRez = null; });
-    
+      window.addEventListener("pointerup", () => { suRez = null; });
   

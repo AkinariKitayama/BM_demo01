@@ -5,7 +5,15 @@
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
+   html, body {
+      height: 100%; margin: 0;
+      overflow: hidden;                      /* ページのスクロール・バウンスを止める */
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+      -webkit-touch-callout: none;           /* 長押しの選択メニューを抑止 */
+      -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none;
+    }
   body {
  background: #000; color: #fff;
       font-family: var(--mono);
@@ -57,31 +65,40 @@
        user-select: none;         /* ★押下ドラッグでテキスト選択に奪われるのを防ぐ */
        -webkit-user-select: none;
      }
-#padW {
-       position: fixed; right: 12px; bottom: 12px;
-       color: var(--dim); font-size: 10px; z-index: 11;
-       pointer-events: none;
-     }
+ #padW {
+         position: fixed;
+         right: calc(12px + env(safe-area-inset-right));
+         bottom: calc(12px + env(safe-area-inset-bottom));
+         color: var(--dim); font-size: 11px; z-index: 11;
+         pointer-events: none;
+       }
 
 
- #shapeUI {
-      position: fixed; right: 12px; top: 12px; z-index: 12;
-      transform-origin: top right;      /* ★スケールは右上を基準に */
-      display: flex; flex-direction: column; gap: 8px;
-      padding: 10px 12px;
-      background: rgba(0,0,0,0.5);
-      border: 0.1px solid rgba(255, 255, 255, 0.435);
-      font-family: var(--mono); font-size: 11px; color: #fff;
-      min-width: 150px;
-    }
+#shapeUI {
+        position: fixed;
+        right: calc(12px + env(safe-area-inset-right));
+        top: calc(12px + env(safe-area-inset-top));
+        z-index: 12;
+        transform-origin: top right;
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 12px 14px;
+        background: rgba(0,0,0,0.5);
+        border: 1px solid var(--hair);
+        border-radius: 6px;
+        font-family: var(--mono); font-size: 12px; color: #fff;
+        min-width: 168px;
+      }
+
+
     .su-title { color: var(--dim); font-size: 10px; letter-spacing: .18em; text-transform:
   uppercase; }
     .su-nrow { display: flex; align-items: center; gap: 8px; }
-    .su-btn {
-      width: 22px; height: 22px; line-height: 1;
-      border: 1px solid var(--hair); background: transparent; color: #fff;
-      cursor: pointer; border-radius: 3px; font-family: var(--mono); font-size: 13px;
-    }
+   .su-btn {
+        width: 34px; height: 34px; line-height: 1;
+        border: 1px solid var(--hair); background: transparent; color: #fff;
+        cursor: pointer; border-radius: 4px; font-family: var(--mono); font-size: 18px;
+        touch-action: manipulation;          /* ダブルタップズーム抑止・反応を速く */
+      }
     .su-btn:hover { border-color: var(--line); }
     .su-dim { color: var(--dim); }
     #suN { min-width: 14px; text-align: center; }
@@ -89,15 +106,15 @@
     .su-item { display: flex; align-items: center; gap: 8px; }
     .su-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; flex: none; }
     .su-sel {
-      flex: 1; appearance: none; -webkit-appearance: none;
-      background: #000; color: #fff; border: 1px solid var(--hair);
-      border-radius: 3px; padding: 3px 6px; font-family: var(--mono); font-size: 11px;
-    }
+        flex: 1; appearance: none; -webkit-appearance: none;
+        background: #000; color: #fff; border: 1px solid var(--hair);
+        border-radius: 4px; padding: 8px; font-family: var(--mono); font-size: 13px;
+        min-height: 36px;
+      }
     .su-sel:hover { border-color: var(--line); }
     .su-sel option { background: #000; color: #fff; }
 
-
-     #su-resize {
-      position: absolute; left: 0; bottom: 0; width: 14px; height: 14px;
-      cursor: nesw-resize;              /* 左下の角（見た目は透明・ホバーで掴める） */
-    }
+#su-resize {
+        position: absolute; left: 0; bottom: 0; width: 28px; height: 28px;
+        cursor: nesw-resize; touch-action: none;
+      } 
