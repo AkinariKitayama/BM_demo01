@@ -71,11 +71,11 @@ function buildSource(data) {
 }
 
 //list.json読み込み
-fetch("/data/list.json")
+  fetch("data/list.json")
     .then(r => r.json())
     .then(list =>
       Promise.all(list.map(item =>
-        fetch("/data/" + item.file).then(r => r.json()).then(data => ({ item, data }))
+        fetch("data/" + item.file).then(r => r.json()).then(data => ({ item, data }))
       ))
     ) 
     .then(loaded => {
