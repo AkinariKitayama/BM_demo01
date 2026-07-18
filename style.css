@@ -7,13 +7,12 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: #000; color: #fff;
-    font-family: var(--mono);
-    font-size: 12px; line-height: 1.5;
-    display: grid; grid-template-columns: 1fr 260px;
+ background: #000; color: #fff;
+      font-family: var(--mono);
+      font-size: 12px; line-height: 1.5;
   }
   /* --- canvas side --- */
-  #stage { position: relative; overflow: hidden; }
+#stage { position: fixed; inset: 0; overflow: hidden; }
   #view { display: block; width: 100%; height: 100%; }
   #empty {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -50,13 +49,18 @@
  select.btn { appearance: none; -webkit-appearance: none; background: #000; }
  select.btn option { background: #000; color: #fff; }
 
- #pad {
-    display: block;
-    width: 100%;
-    height: auto;
-    background: #000;
-    border: 1px solid #333;
-    border-radius: 4px;
-    cursor: crosshair;
-    touch-action: none;   /* ドラッグ中に画面スクロールさせない */
-  }
+#pad {
+       position: fixed; inset: 0;
+       width: 100%; height: 100%;
+       z-index: 10;
+       touch-action: none;
+       user-select: none;         /* ★押下ドラッグでテキスト選択に奪われるのを防ぐ */
+       -webkit-user-select: none;
+     }
+   #padW {  
+     position: fixed; left: 12px; bottom: 12px;
+     color: var(--dim); font-size: 10px; z-index: 11;
+     pointer-events: none;    /* 数値はクリックを透過 */
+   }
+
+
