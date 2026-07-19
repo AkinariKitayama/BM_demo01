@@ -430,7 +430,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
 
         // 頂点＝白点（＋掴みリング）。種名はモーフ中は省略（頂点数が過渡的に合わないため）
         const act = activeSources();
-         padCtx.font = "100 12px 'm-plus-2c', sans-serif";
+         padCtx.font = "400 12px 'm-plus-2c', sans-serif";
         padCtx.textAlign = "center"; padCtx.textBaseline = "alphabetic";
         verts.forEach((v, i) => {
           padCtx.strokeStyle = "rgba(255,255,255,0.18)"; padCtx.lineWidth = 1;
@@ -547,6 +547,47 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
         state.weights = padToWeights(q.x, q.y);
         elPadW.textContent = state.weights.map(w => w.toFixed(2)).join(" / ");
         drawPad();
+      }
+
+      // 操作点に最も近い境界点（辺・角どちらも closestOnSegment で拾える）
+      function nearestBoundary(p, verts) {
+        let best = null, bd = Infinity;
+        for (let i = 0; i < verts.length; i++) {
+          const c = closestOnSegment(p, verts[i], verts[(i + 1) % verts.length]);
+          const d = Math.hypot(p.x - c.x, p.y - c.y);
+          if (d < bd) { bd = d; best = c; }
+        }
+        return { point: best, dist: bd };
+      }
+
+      const SAFE_DIST = 20;   // 辺/角から最低これだけ離す
+      function easeBackIfNeeded() {
+        const verts = padVertices();
+        const q = padPointScreen();
+        if (!q || verts.length < 2) return;
+        const nb = nearestBoundary(q, verts);
+        if (nb.dist >= SAFE_DIST) return;                 // すでに安全なら何もしない
+        let dx = q.x - nb.point.x, dy = q.y - nb.point.y;
+        let len = Math.hypot(dx, dy);
+        if (len < 1e-3) {                                 // 完全に境界上 → 中心方向へ逃がす
+          dx = state.padCenter.x - nb.point.x; dy = state.padCenter.y - nb.point.y;
+          len = Math.hypot(dx, dy) || 1;
+        }
+        const to = { x: nb.point.x + dx / len * SAFE_DIST,
+                     y: nb.point.y + dy / len * SAFE_DIST };
+        state.ptEase = { from: q, to, start: performance.now(), dur: 170 };
+        requestAnimationFrame(ptEaseTick);
+      }
+
+      // 操作点をイーズで動かす（毎フレーム setBlend で重み・描画も更新）
+      function ptEaseTick() {
+        if (!state.ptEase) return;
+        const raw = (performance.now() - state.ptEase.start) / state.ptEase.dur;
+        const t = easeInOut(Math.max(0, Math.min(1, raw)));
+        const { from, to } = state.ptEase;
+        setBlend({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+        if (raw >= 1) state.ptEase = null;
+        else requestAnimationFrame(ptEaseTick);
       }
 
 
@@ -688,7 +729,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
         if (!padMode) { bgDown(e); return; }        // 図形の外 → 背景ジェスチャ
         elPad.setPointerCapture(e.pointerId);
         if (padMode === "move") moveGrab = { dx: p.x - state.padCenter.x, dy: p.y - state.padCenter.y };
-        if (padMode === "blend") { state.coordShow = true; setBlend(p); }
+        if (padMode === "blend") { state.ptEase = null; state.coordShow = true; setBlend(p); }
       });
       elPad.addEventListener("pointermove", (e) => {
         if (bgPointers.has(e.pointerId)) { bgMove(e); return; }   // 背景ジェスチャ優先
@@ -712,6 +753,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
       });
       elPad.addEventListener("pointerup", (e) => {
         if (bgPointers.has(e.pointerId)) bgUp(e);
+        if (padMode === "blend") easeBackIfNeeded();   // ★辺/角に近ければ戻す
         padMode = null; state.coordShow = false; drawPad();
       });
       elPad.addEventListener("pointercancel", (e) => {
