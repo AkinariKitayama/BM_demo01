@@ -277,7 +277,8 @@ function render(phase) {
     
   const zoom = state.zoom || 1;
     const step = cw * 0.45 * zoom;                    // 複製間隔（ズーム連動）
-    const cy = (state.viewY != null) ? state.viewY : ch * 0.58;
+    const cyBase = ch * (Math.min(window.innerWidth, window.innerHeight) < 500 ? 0.68 : 0.58);
+    const cy = (state.viewY != null) ? state.viewY : cyBase;
     const panX = state.panX || 0;
     const off = ((panX % step) + step) % step;        // 0..step（無限ループ用）
     for (let cx = off - step; cx < cw + step; cx += step) {
