@@ -320,10 +320,11 @@ function tick(ts) {
 
 requestAnimationFrame(tick); 
 
-  window.addEventListener("resize", () => {
+    window.addEventListener("resize", () => {
     if (!state.sources.length) return;
     fitCanvas();
-    syncPadSize(); drawPad();   // ブラウザリサイズ・DPR変化にも追従
+    updateGrab();               // ★画面サイズに応じて円/判定を再計算
+    syncPadSize(); drawPad();
   });
 
 
@@ -519,7 +520,14 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
     }
 
     // マウス位置から操作モードを判定: 'resize' | 'move' | 'blend' | null
-      const VERTEX_GRAB = 30, EDGE_GRAB = 24;
+      let VERTEX_GRAB = 20, EDGE_GRAB = 18;
+        function updateGrab() {
+          const phone = Math.min(window.innerWidth, window.innerHeight) < 500;  // スマホ判定
+          VERTEX_GRAB = phone ? 15 : 22;   // スマホは小さめ
+          EDGE_GRAB   = phone ? 12 : 18;
+        }
+        updateGrab();
+      
 
       function padHit(p) {
           const verts = padVertices();
@@ -769,6 +777,11 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
       const shapeUI  = document.getElementById("shapeUI");
       const suResize = document.getElementById("su-resize");
       let shapeScale = 1, suRez = null;
+
+      if (Math.min(window.innerWidth, window.innerHeight) < 500) {   // スマホ判定
+        shapeScale = 0.75;                                          // 小さく表示
+        shapeUI.style.transform = `scale(${shapeScale})`;
+      }
 
       suResize.addEventListener("pointerdown", (e) => {
         e.preventDefault(); e.stopPropagation();

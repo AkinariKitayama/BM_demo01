@@ -4,7 +4,7 @@
     --dim:  rgba(255,255,255,0.45);
      --mono: "m-plus-2c", sans-serif;
   }
-* { box-sizing: border-box; font-weight: 100; font-style: normal; }
+* { box-sizing: border-box; font-style: normal; }
    html, body {
       height: 100%; margin: 0;
       overflow: hidden;                      /* ページのスクロール・バウンスを止める */
