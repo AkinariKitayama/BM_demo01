@@ -83,7 +83,7 @@
         transform-origin: top right;
         display: flex; flex-direction: column; gap: 10px;
         padding: 12px 14px;
-        background: transparent;
+        background: rgba(0,0,0,0);
         border: 1px solid var(--hair);
 
         font-family: var(--mono); font-size: 12px; color: #fff;
@@ -108,7 +108,7 @@
     .su-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; flex: none; }
     .su-sel {
         flex: 1; appearance: none; -webkit-appearance: none;
-        background: #000; color: #fff; border: 1px solid var(--hair);
+        background: rgba(0,0,0,0); color: #fff; border: 1px solid var(--hair);
         padding: 8px; font-family: var(--mono); font-size: 13px;
         min-height: 36px;
       }
