@@ -699,7 +699,7 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
         bgPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         elPad.setPointerCapture(e.pointerId);
         if (bgPointers.size >= 2) {
-          if (state.viewY == null) state.viewY = canvas.clientHeight * 0.58;
+
           const [a, b] = [...bgPointers.values()];
           pinchPrev = {
             cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,       // ピンチ中心
@@ -714,18 +714,15 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
 
       function bgMove(e) {
         bgPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (bgPointers.size >= 2 && pinchPrev) {
+         if (bgPointers.size >= 2 && pinchPrev) {
           const [a, b] = [...bgPointers.values()];
           const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
           const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
           const newZoom = Math.max(0.3, Math.min(4, state.zoom * dist / pinchPrev.dist));
-          const r = newZoom / state.zoom;                    // クランプ後の実比率
-          // ピンチ中心 (cx,cy) を軸にズーム
+          const r = newZoom / state.zoom;
+          // X だけ指の位置を軸に。Y はいじらない＝BM中心Yを軸にズーム
           state.panX  = cx - (cx - state.panX) * r;
-          state.viewY = cy - (cy - state.viewY) * r;
-          // 2本指の中心移動ぶんパン（平行移動に追従）
-          state.panX  += cx - pinchPrev.cx;
-          state.viewY += cy - pinchPrev.cy;
+          state.panX += cx - pinchPrev.cx;
           state.zoom = newZoom;
           pinchPrev = { cx, cy, dist };
         } else if (panStart) {
