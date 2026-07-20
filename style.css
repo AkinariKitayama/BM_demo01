@@ -130,3 +130,10 @@
     }
     .su-tg + .su-tg { border-left: 1px solid var(--hair); }
     .su-tg.active { background: rgba(255,255,255,0.12); color: #fff; }
+
+    #padDraw {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 20;              /* パネル(12)より上＝多角形が常に手前 */
+      pointer-events: none;     /* 見た目だけ。クリックは透過 */
+    }

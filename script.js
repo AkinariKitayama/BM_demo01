@@ -338,16 +338,20 @@ requestAnimationFrame(tick);
     //   画面全体の透明オーバーレイに描画（背景のBMが透ける）
     // =============================================================================
   
-    const padCtx = elPad.getContext("2d");
+     const elPadDraw = document.getElementById("padDraw");   // 描画レイヤー
+     const padCtx = elPadDraw.getContext("2d");
+
 
     // オーバーレイcanvasの内部解像度を画面サイズ×DPRに合わせる
     function syncPadSize() {
-      const dpr = window.devicePixelRatio || 1;
-      const w = elPad.clientWidth, h = elPad.clientHeight;
-      elPad.width  = Math.max(1, Math.round(w * dpr));
-      elPad.height = Math.max(1, Math.round(h * dpr));
-      padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);  // 以降は論理px(CSS px)で描ける
-    }
+        const dpr = window.devicePixelRatio || 1;
+        const w = elPadDraw.clientWidth, h = elPadDraw.clientHeight;
+        elPadDraw.width  = Math.max(1, Math.round(w * dpr));
+        elPadDraw.height = Math.max(1, Math.round(h * dpr));
+        padCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+
   
     // 中心 state.padCenter・半径 state.padR から正N角形の頂点（頂点0=真上）
  function padVertices() {
