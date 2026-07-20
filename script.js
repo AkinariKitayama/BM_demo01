@@ -106,8 +106,8 @@ function buildSource(data) {
     state.phase = 0; state.playing = true;
     // 多角形の初期位置・大きさ（左下寄りに小さく配置）
     const phonePad = Math.min(elPad.clientWidth, elPad.clientHeight) < 500;   // スマホ判定
-      state.padR = Math.min(elPad.clientWidth, elPad.clientHeight) * (phonePad ? 0.20 : 0.16);
-      state.padCenter = { x: state.padR + 48, y: state.padR + (phonePad ? 120 : 56) };
+      state.padR = Math.min(elPad.clientWidth, elPad.clientHeight) * (phonePad ? 0.22 : 0.16);
+      state.padCenter = { x: state.padR + 40, y: state.padR + (phonePad ? 60 : 56) };
     // 初期ブレンド点 = 先頭の種の頂点（＝先頭種がほぼ1）
     const v0 = padVertices()[0];
     state.padLocal = { x: (v0.x - state.padCenter.x) / state.padR,
