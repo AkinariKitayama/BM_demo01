@@ -106,13 +106,14 @@ function buildSource(data) {
     state.phase = 0; state.playing = true;
     // 多角形の初期位置・大きさ（左下寄りに小さく配置）
     const phonePad = Math.min(elPad.clientWidth, elPad.clientHeight) < 500;   // スマホ判定
-      state.padR = Math.min(elPad.clientWidth, elPad.clientHeight) * (phonePad ? 0.22 : 0.16);
-      state.padCenter = { x: state.padR + 40, y: state.padR + (phonePad ? 60 : 56) };
-    // 初期ブレンド点 = 先頭の種の頂点（＝先頭種がほぼ1）
-    const v0 = padVertices()[0];
-    state.padLocal = { x: (v0.x - state.padCenter.x) / state.padR,
-                       y: (v0.y - state.padCenter.y) / state.padR };
-    state.weights = padToWeights(v0.x, v0.y);
+      state.padR = Math.min(elPad.clientWidth, elPad.clientHeight) * (phonePad ? 0.25 : 0.16);
+      state.padCenter = { x: state.padR + (phonePad ? 10 : 40), y: state.padR + (phonePad ? 20 : 56)
+  };
+
+      state.padLocal = { x: 0, y: 0 };
+      state.weights = padToWeights(state.padCenter.x, state.padCenter.y);
+
+
     elPadW.textContent = state.weights.map(w => w.toFixed(2)).join(" / ");
     drawPad(); 
     rebuildShapeUI();
@@ -783,6 +784,17 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
         if (bgPointers.has(e.pointerId)) bgUp(e);
         padMode = null; state.coordShow = false;
       });
+
+      // PC: ホイール/トラックパッドのスクロールでズーム（カーソルXを軸、YはBM中心）
+      elPad.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const fx = e.clientX;
+        const newZoom = Math.max(0.3, Math.min(4, (state.zoom || 1) * Math.exp(-e.deltaY * 0.0015)));
+        const r = newZoom / (state.zoom || 1);
+        state.panX = fx - (fx - (state.panX || 0)) * r;   // カーソルX基準でズーム
+        state.zoom = newZoom;
+      }, { passive: false });
+
 
 
     suInc.addEventListener("click", shapeInc);
