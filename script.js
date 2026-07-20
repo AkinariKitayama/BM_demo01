@@ -19,6 +19,7 @@ const state = {
     panX: 0,          // 横スワイプの累積移動量
     zoom: 1,          // ピンチズーム倍率
     panVel: 0,        // 横スワイプの慣性速度（px/フレーム）
+    viewY: null,      // BMの縦位置（ピンチで指に追従。nullなら既定=ch*0.58）
 };
 
 // DOM
@@ -276,7 +277,7 @@ function render(phase) {
     
   const zoom = state.zoom || 1;
     const step = cw * 0.45 * zoom;                    // 複製間隔（ズーム連動）
-    const cy = ch * 0.58;
+    const cy = (state.viewY != null) ? state.viewY : ch * 0.58;
     const panX = state.panX || 0;
     const off = ((panX % step) + step) % step;        // 0..step（無限ループ用）
     for (let cx = off - step; cx < cw + step; cx += step) {
@@ -307,7 +308,7 @@ function tick(ts) {
         state.phase %= 1; if (state.phase < 0) state.phase += 1;
       } 
       // 横スワイプの慣性（ドラッグ/ピンチ中でないときだけ減衰しながら流す）
-        if (!panStart && !pinchStart && state.panVel) {
+         if (!panStart && !pinchPrev && state.panVel) {
           state.panX += state.panVel;
           state.panVel *= 0.93;                             // 摩擦（1に近いほど長く滑る）
           if (Math.abs(state.panVel) < 0.1) state.panVel = 0;
@@ -690,40 +691,55 @@ function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2)
 
      // ---- 背景ジェスチャ：スワイプ=パン / ピンチ=ズーム ----
       const bgPointers = new Map();
-      let panStart = null, pinchStart = null;
+      let panStart = null, pinchPrev = null;
 
       function bgDown(e) {
-        state.panVel = 0;                         // ★触れたら流れを止める
+        state.panVel = 0;
         bgPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         elPad.setPointerCapture(e.pointerId);
         if (bgPointers.size >= 2) {
+          if (state.viewY == null) state.viewY = canvas.clientHeight * 0.58;
           const [a, b] = [...bgPointers.values()];
-          pinchStart = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom: state.zoom || 1 };
+          pinchPrev = {
+            cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,       // ピンチ中心
+            dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+          };
           panStart = null;
         } else {
           panStart = { x: e.clientX, panX: state.panX || 0 };
-          pinchStart = null;
+          pinchPrev = null;
         }
       }
+
       function bgMove(e) {
         bgPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (bgPointers.size >= 2 && pinchStart) {          // ピンチ→ズーム
+        if (bgPointers.size >= 2 && pinchPrev) {
           const [a, b] = [...bgPointers.values()];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          state.zoom = Math.max(0.3, Math.min(4, pinchStart.zoom * d / pinchStart.dist));
-        } else if (panStart) {                              // スワイプ→パン
+          const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+          const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+          const newZoom = Math.max(0.3, Math.min(4, state.zoom * dist / pinchPrev.dist));
+          const r = newZoom / state.zoom;                    // クランプ後の実比率
+          // ピンチ中心 (cx,cy) を軸にズーム
+          state.panX  = cx - (cx - state.panX) * r;
+          state.viewY = cy - (cy - state.viewY) * r;
+          // 2本指の中心移動ぶんパン（平行移動に追従）
+          state.panX  += cx - pinchPrev.cx;
+          state.viewY += cy - pinchPrev.cy;
+          state.zoom = newZoom;
+          pinchPrev = { cx, cy, dist };
+        } else if (panStart) {
           const newPanX = panStart.panX + (e.clientX - panStart.x);
-          state.panVel = newPanX - state.panX;              // このフレームの移動量＝速度
+          state.panVel = newPanX - state.panX;
           state.panX = newPanX;
         }
       }
 
       function bgUp(e) {
-        bgPointers.delete(e.pointerId);                           
-        pinchStart = null;
+        bgPointers.delete(e.pointerId);
+        pinchPrev = null;
         if (bgPointers.size === 1) {
           const pos = [...bgPointers.values()][0];
-          panStart = { x: pos.x, panX: state.panX || 0 };  // 1本残ったらパン再開
+          panStart = { x: pos.x, panX: state.panX || 0 };   // 1本残ったらパン再開
         } else if (bgPointers.size === 0) {
           panStart = null;
         }
